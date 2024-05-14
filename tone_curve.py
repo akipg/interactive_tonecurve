@@ -2,7 +2,7 @@ import sys
 import cv2
 import numpy as np
 from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QVBoxLayout, QHBoxLayout, QPushButton, QFileDialog, QComboBox, QWidget
-from PyQt5.QtGui import QPixmap, QImage, QPainter, QColor
+from PyQt5.QtGui import QPixmap, QImage
 from PyQt5.QtCore import Qt, QPoint
 
 class ToneCurveWidget(QLabel):
@@ -46,11 +46,31 @@ class ToneCurveWidget(QLabel):
         if self.drawing:
             point = event.pos()
             if 0 <= point.x() < 256 and 0 <= point.y() < 256:
-                cv2.line(self.image, (self.last_point.x(), 255 - self.curve[self.last_point.x()]),
-                         (point.x(), 255 - point.y()), (0, 0, 0), 1)
-                self.curve[point.x()] = 255 - point.y()
+                self.draw_line(self.last_point, point)
                 self.last_point = point
                 self.update_curve()
+
+    def draw_line(self, start_point, end_point):
+        x0, y0 = start_point.x(), start_point.y()
+        x1, y1 = end_point.x(), end_point.y()
+
+        dx = abs(x1 - x0)
+        dy = abs(y1 - y0)
+        sx = 1 if x0 < x1 else -1
+        sy = 1 if y0 < y1 else -1
+        err = dx - dy
+
+        while True:
+            self.curve[x0] = 255 - y0
+            if x0 == x1 and y0 == y1:
+                break
+            e2 = err * 2
+            if e2 > -dy:
+                err -= dy
+                x0 += sx
+            if e2 < dx:
+                err += dx
+                y0 += sy
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
