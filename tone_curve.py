@@ -1,8 +1,8 @@
 import sys
 import cv2
 import numpy as np
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QVBoxLayout, QHBoxLayout, QPushButton, QFileDialog, QComboBox
-from PyQt5.QtGui import QPixmap, QImage
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QVBoxLayout, QHBoxLayout, QPushButton, QFileDialog, QComboBox, QWidget
+from PyQt5.QtGui import QPixmap, QImage, QPainter, QColor
 from PyQt5.QtCore import Qt, QPoint
 
 class ToneCurveWidget(QLabel):
@@ -21,8 +21,18 @@ class ToneCurveWidget(QLabel):
     def update_curve(self):
         self.image = np.zeros((256, 256, 3), dtype=np.uint8)
         self.image.fill(255)
+
+        # Draw 45 degree and -45 degree lines
         for i in range(256):
+            self.image[i, i] = [200, 200, 200]
+            if i % 2 == 0:
+                self.image[i, 255 - i] = [200, 200, 200]
+
+        for i in range(255):
             self.image[255 - self.curve[i], i] = [0, 0, 0]
+            if i < 255:
+                self.image[255 - self.curve[i+1], i+1] = [0, 0, 0]
+
         self.setPixmap(QPixmap.fromImage(QImage(self.image.data, 256, 256, 3 * 256, QImage.Format_RGB888)))
 
     def mousePressEvent(self, event):
@@ -35,8 +45,12 @@ class ToneCurveWidget(QLabel):
     def mouseMoveEvent(self, event):
         if self.drawing:
             point = event.pos()
-            self.curve[point.x()] = 255 - point.y()
-            self.update_curve()
+            if 0 <= point.x() < 256 and 0 <= point.y() < 256:
+                cv2.line(self.image, (self.last_point.x(), 255 - self.curve[self.last_point.x()]),
+                         (point.x(), 255 - point.y()), (0, 0, 0), 1)
+                self.curve[point.x()] = 255 - point.y()
+                self.last_point = point
+                self.update_curve()
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -92,7 +106,7 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.tone_curve_widget)
         main_layout.addLayout(layout)
 
-        container = QLabel()
+        container = QWidget()
         container.setLayout(main_layout)
         self.setCentralWidget(container)
 
