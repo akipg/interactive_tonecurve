@@ -1,9 +1,9 @@
 import sys
 import cv2
 import numpy as np
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QVBoxLayout, QHBoxLayout, QPushButton, QFileDialog, QComboBox, QWidget
-from PyQt5.QtGui import QPixmap, QImage
-from PyQt5.QtCore import Qt, QPoint
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QVBoxLayout, QHBoxLayout, QPushButton, QFileDialog, QComboBox, QWidget, QCheckBox
+from PyQt5.QtGui import QPixmap, QImage, QDragEnterEvent, QDropEvent
+from PyQt5.QtCore import Qt, QPoint, QMimeData
 
 class ToneCurveWidget(QLabel):
     def __init__(self, parent=None):
@@ -12,11 +12,20 @@ class ToneCurveWidget(QLabel):
         self.curve = np.linspace(0, 255, 256).astype(np.uint8)
         self.drawing = False
         self.last_point = QPoint()
+        self.saved_curves = []
         self.update_curve()
 
     def reset_curve(self):
         self.curve = np.linspace(0, 255, 256).astype(np.uint8)
         self.update_curve()
+
+    def save_curve(self):
+        self.saved_curves.append(self.curve.copy())
+
+    def load_curve(self, index):
+        if index < len(self.saved_curves):
+            self.curve = self.saved_curves[index].copy()
+            self.update_curve()
 
     def update_curve(self):
         self.image = np.zeros((256, 256, 3), dtype=np.uint8)
@@ -98,6 +107,13 @@ class ImageProcessor:
             return QPixmap.fromImage(qimg)
         return QPixmap()
 
+    def get_original_image(self):
+        if self.image is not None:
+            height, width, channel = self.image.shape
+            qimg = QImage(self.image.data, width, height, 3 * width, QImage.Format_RGB888)
+            return QPixmap.fromImage(qimg)
+        return QPixmap()
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -107,21 +123,38 @@ class MainWindow(QMainWindow):
         self.image_label = QLabel()
         self.image_label.setFixedSize(256, 256)
 
+        self.original_image_label = QLabel()
+        self.original_image_label.setFixedSize(256, 256)
+        self.original_image_label.setVisible(False)
+
         load_button = QPushButton('画像を読み込む')
         load_button.clicked.connect(self.load_image)
 
         reset_button = QPushButton('リセット')
         reset_button.clicked.connect(self.reset_curve)
 
+        save_curve_button = QPushButton('カーブを保存')
+        save_curve_button.clicked.connect(self.save_curve)
+
+        load_curve_button = QPushButton('カーブを読み込み')
+        load_curve_button.clicked.connect(lambda: self.tone_curve_widget.load_curve(0))  # 0番目のカーブを読み込み
+
         curve_selector = QComboBox()
         curve_selector.addItems(['ガンマ補正', '線形', '対数', '逆対数'])
         curve_selector.currentIndexChanged.connect(self.select_preset_curve)
 
+        toggle_original_checkbox = QCheckBox('元画像を表示')
+        toggle_original_checkbox.stateChanged.connect(self.toggle_original_image)
+
         layout = QVBoxLayout()
         layout.addWidget(load_button)
         layout.addWidget(self.image_label)
+        layout.addWidget(self.original_image_label)
         layout.addWidget(reset_button)
+        layout.addWidget(save_curve_button)
+        layout.addWidget(load_curve_button)
         layout.addWidget(curve_selector)
+        layout.addWidget(toggle_original_checkbox)
 
         main_layout = QHBoxLayout()
         main_layout.addWidget(self.tone_curve_widget)
@@ -133,6 +166,11 @@ class MainWindow(QMainWindow):
 
         self.tone_curve_widget.mouseMoveEvent = self.wrap_event(self.tone_curve_widget.mouseMoveEvent)
         self.tone_curve_widget.mouseReleaseEvent = self.wrap_event(self.tone_curve_widget.mouseReleaseEvent)
+
+        self.image_label.mousePressEvent = self.show_original_image
+        self.image_label.mouseReleaseEvent = self.hide_original_image
+
+        self.setAcceptDrops(True)
 
     def wrap_event(self, func):
         def wrapper(event):
@@ -151,6 +189,9 @@ class MainWindow(QMainWindow):
         self.tone_curve_widget.reset_curve()
         self.update_image()
 
+    def save_curve(self):
+        self.tone_curve_widget.save_curve()
+
     def select_preset_curve(self, index):
         if index == 0:
             gamma = 2.2
@@ -167,6 +208,30 @@ class MainWindow(QMainWindow):
     def update_image(self):
         self.image_processor.apply_tone_curve(self.tone_curve_widget.curve)
         self.image_label.setPixmap(self.image_processor.get_processed_image())
+
+    def show_original_image(self, event):
+        self.image_label.setPixmap(self.image_processor.get_original_image())
+
+    def hide_original_image(self, event):
+        self.update_image()
+
+    def toggle_original_image(self, state):
+        self.original_image_label.setVisible(state == Qt.Checked)
+        if state == Qt.Checked:
+            self.original_image_label.setPixmap(self.image_processor.get_original_image())
+        else:
+            self.original_image_label.clear()
+
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event: QDropEvent):
+        for url in event.mimeData().urls():
+            file_path = url.toLocalFile()
+            self.image_processor.load_image(file_path)
+            self.update_image()
+            break
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
