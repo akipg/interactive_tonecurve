@@ -30,8 +30,8 @@ class ToneCurveWidget(QLabel):
 
         for i in range(255):
             self.image[255 - self.curve[i], i] = [0, 0, 0]
-            if i < 255:
-                self.image[255 - self.curve[i+1], i+1] = [0, 0, 0]
+            self.image[255 - self.curve[i + 1], i + 1] = [0, 0, 0]
+            cv2.line(self.image, (i, 255 - self.curve[i]), (i + 1, 255 - self.curve[i + 1]), (0, 0, 0))
 
         self.setPixmap(QPixmap.fromImage(QImage(self.image.data, 256, 256, 3 * 256, QImage.Format_RGB888)))
 
@@ -61,7 +61,8 @@ class ToneCurveWidget(QLabel):
         err = dx - dy
 
         while True:
-            self.curve[x0] = 255 - y0
+            if 0 <= x0 < 256 and 0 <= y0 < 256:
+                self.curve[x0] = 255 - y0
             if x0 == x1 and y0 == y1:
                 break
             e2 = err * 2
