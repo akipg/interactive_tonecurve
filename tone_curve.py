@@ -96,8 +96,14 @@ class MainWindow(QMainWindow):
         container.setLayout(main_layout)
         self.setCentralWidget(container)
 
-        self.tone_curve_widget.mouseMoveEvent = self.update_image_on_curve_change
-        self.tone_curve_widget.mouseReleaseEvent = self.update_image_on_curve_change
+        self.tone_curve_widget.mouseMoveEvent = self.wrap_event(self.tone_curve_widget.mouseMoveEvent)
+        self.tone_curve_widget.mouseReleaseEvent = self.wrap_event(self.tone_curve_widget.mouseReleaseEvent)
+
+    def wrap_event(self, func):
+        def wrapper(event):
+            func(event)
+            self.update_image()
+        return wrapper
 
     def load_image(self):
         options = QFileDialog.Options()
@@ -121,11 +127,6 @@ class MainWindow(QMainWindow):
         elif index == 3:
             self.tone_curve_widget.curve = np.array([255 * (1 - np.log2(1 + (255 - i)) / np.log2(256)) for i in range(256)], dtype=np.uint8)
         self.tone_curve_widget.update_curve()
-        self.update_image()
-
-    def update_image_on_curve_change(self, event):
-        self.tone_curve_widget.mouseMoveEvent(event)
-        self.image_processor.apply_tone_curve(self.tone_curve_widget.curve)
         self.update_image()
 
     def update_image(self):
